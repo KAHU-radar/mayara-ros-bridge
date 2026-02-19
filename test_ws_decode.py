@@ -3,11 +3,16 @@
 Test script — verify WebSocket connection and protobuf decoding
 without ROS2. Run this first to confirm data is flowing.
 
-Usage: python3 test_ws_decode.py [ws_url]
+Usage:
+    python3 test_ws_decode.py                          # auto-discovers radar
+    python3 test_ws_decode.py 192.168.1.50:6502        # auto-discovers on a different host
+    python3 test_ws_decode.py ws://<host>:6502/v2/api/radars/<id>/spokes  # explicit URL
 """
 
+import json
 import sys
 import time
+import urllib.request
 
 try:
     import websocket
@@ -20,8 +25,37 @@ except ImportError:
 
 from radar_message_pb import decode_radar_message
 
-WS_URL = sys.argv[1] if len(sys.argv) > 1 else \
-    "ws://10.0.0.28:6502/v2/api/radars/radar-16/spokes"
+DEFAULT_HOST = "10.0.0.28:6502"
+
+
+def discover_radar_url(host: str) -> str:
+    """Return the WebSocket spoke URL for the first radar Mayara has found."""
+    api_url = f"http://{host}/v2/api/radars"
+    print(f"Discovering radar from {api_url} ...")
+    try:
+        with urllib.request.urlopen(api_url, timeout=5) as resp:
+            radars = json.loads(resp.read().decode())
+    except Exception as e:
+        raise RuntimeError(f"Cannot reach Mayara API at {api_url}: {e}")
+    if not radars:
+        raise RuntimeError("Mayara found no radars")
+    radar_id = radars[0]["id"]
+    url = f"ws://{host}/v2/api/radars/{radar_id}/spokes"
+    print(f"Found radar: {radar_id}  →  {url}")
+    return url
+
+
+arg = sys.argv[1] if len(sys.argv) > 1 else ""
+
+if arg.startswith("ws://") or arg.startswith("wss://"):
+    # Explicit full WebSocket URL passed
+    WS_URL = arg
+elif arg:
+    # Host (and optional port) passed — auto-discover radar ID
+    WS_URL = discover_radar_url(arg)
+else:
+    # Nothing passed — use default host and auto-discover
+    WS_URL = discover_radar_url(DEFAULT_HOST)
 
 count = 0
 spoke_count = 0

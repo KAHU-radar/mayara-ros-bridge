@@ -14,7 +14,10 @@ Usage:
     python3 bridge_node.py
 
 Parameters (ROS2 or env):
-    mayara_ws_url       - WebSocket URL (default: ws://10.0.0.28:6502/v2/api/radars/radar-11/spokes)
+    mayara_host         - Mayara host:port (default: 10.0.0.28:6502). Radar ID
+                          is auto-discovered from the Mayara REST API on startup.
+    mayara_ws_url       - Override: full WebSocket URL. Set this to skip
+                          auto-discovery and connect to a specific radar ID.
     spokes_per_sector   - Spokes to batch per RadarSector (default: 64)
     radar_frame_id      - TF frame for radar data (default: halo_a)
     radar_topic         - Topic for RadarSector (default: /aura/perception/sensors/halo_a/data)
@@ -22,12 +25,14 @@ Parameters (ROS2 or env):
     spokes_per_rev      - Spokes per revolution from Mayara (default: 2048)
 """
 
+import json
 import math
 import os
 import sys
 import time
 import threading
 import struct
+import urllib.request
 from collections import deque
 
 import rclpy
@@ -56,14 +61,44 @@ except ImportError:
 TWO_PI = 2.0 * math.pi
 
 
+def _discover_radar_url(host: str) -> str:
+    """
+    Ask the Mayara REST API which radars are available and return the
+    WebSocket URL for the first one found.
+
+    Args:
+        host: Mayara host:port, e.g. "10.0.0.28:6502"
+
+    Returns:
+        WebSocket URL, e.g. "ws://10.0.0.28:6502/v2/api/radars/radar-3/spokes"
+
+    Raises:
+        RuntimeError if no radars are found or the API is unreachable.
+    """
+    api_url = f"http://{host}/v2/api/radars"
+    try:
+        with urllib.request.urlopen(api_url, timeout=5) as resp:
+            radars = json.loads(resp.read().decode())
+    except Exception as e:
+        raise RuntimeError(f"Cannot reach Mayara API at {api_url}: {e}")
+
+    # Response is a list of radar objects; each has an "id" field
+    if not radars:
+        raise RuntimeError(f"Mayara found no radars (response: {radars})")
+
+    radar_id = radars[0]["id"]
+    return f"ws://{host}/v2/api/radars/{radar_id}/spokes"
+
+
 class MayaraRosBridge(Node):
     def __init__(self):
         super().__init__("mayara_ros_bridge")
 
         # Declare parameters with defaults
+        self.declare_parameter("mayara_host",
+            os.environ.get("MAYARA_HOST", "10.0.0.28:6502"))
         self.declare_parameter("mayara_ws_url",
-            os.environ.get("MAYARA_WS_URL",
-                "ws://10.0.0.28:6502/v2/api/radars/radar-16/spokes"))
+            os.environ.get("MAYARA_WS_URL", ""))
         self.declare_parameter("spokes_per_sector", int(os.environ.get("SPOKES_PER_SECTOR", "64")))
         self.declare_parameter("radar_frame_id", os.environ.get("RADAR_FRAME_ID", "halo_a"))
         self.declare_parameter("radar_topic",
@@ -74,8 +109,21 @@ class MayaraRosBridge(Node):
         self.declare_parameter("odom_frame_id", os.environ.get("ODOM_FRAME_ID", "odom"))
         self.declare_parameter("base_frame_id", os.environ.get("BASE_FRAME_ID", "base_link"))
 
-        # Read parameters
-        self.ws_url = self.get_parameter("mayara_ws_url").value
+        # Read parameters — auto-discover radar ID if no explicit URL is set
+        mayara_host = self.get_parameter("mayara_host").value
+        ws_url_override = self.get_parameter("mayara_ws_url").value
+
+        if ws_url_override:
+            self.ws_url = ws_url_override
+            self.get_logger().info(f"Using configured WebSocket URL: {self.ws_url}")
+        else:
+            self.get_logger().info(f"Auto-discovering radar from http://{mayara_host}/v2/api/radars ...")
+            try:
+                self.ws_url = _discover_radar_url(mayara_host)
+                self.get_logger().info(f"Discovered radar: {self.ws_url}")
+            except RuntimeError as e:
+                self.get_logger().error(str(e))
+                raise
         self.spokes_per_sector = self.get_parameter("spokes_per_sector").value
         self.radar_frame_id = self.get_parameter("radar_frame_id").value
         self.radar_topic = self.get_parameter("radar_topic").value

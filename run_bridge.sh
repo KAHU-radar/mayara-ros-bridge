@@ -1,9 +1,13 @@
 #!/bin/bash
 # Run the Mayara→ROS2 bridge
-# Usage: ./run_bridge.sh [mayara_ws_url]
 #
-# Defaults to ws://10.0.0.28:6502/v2/api/radars/radar-11/spokes
-# Override with: ./run_bridge.sh ws://localhost:6502/v2/api/radars/radar-11/spokes
+# The radar ID is auto-discovered from the Mayara REST API on startup,
+# so you never need to edit this file when the radar ID changes.
+#
+# Usage:
+#   ./run_bridge.sh                          # auto-discover radar (default host 10.0.0.28:6502)
+#   MAYARA_HOST=192.168.1.50:6502 ./run_bridge.sh   # different host, still auto-discovers
+#   MAYARA_WS_URL=ws://host:6502/v2/api/radars/<id>/spokes ./run_bridge.sh  # skip discovery
 
 set -e
 
@@ -29,7 +33,7 @@ python3 -c "import websocket" 2>/dev/null || {
     pip install websocket-client --break-system-packages
 }
 
-# Override WebSocket URL if provided
+# Override WebSocket URL if provided as a positional arg (for backward compatibility)
 if [ -n "$1" ]; then
     export MAYARA_WS_URL="$1"
 fi

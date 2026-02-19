@@ -41,7 +41,7 @@ Mayara (port 6502)
 ### 1. Copy to Pi
 
 ```bash
-scp -r mayara_ros_bridge/ pi@10.0.0.28:~/kahu-stack/
+scp -r mayara_ros_bridge/ pi@<pi-ip>:~/kahu-stack/
 ```
 
 ### 2. Test WebSocket connection (no ROS2 needed)
@@ -51,6 +51,7 @@ cd ~/kahu-stack/mayara_ros_bridge
 python3 test_ws_decode.py
 ```
 
+The script auto-discovers the active radar from the Mayara API and connects.
 You should see spoke data flowing with angles, ranges, and data lengths.
 
 ### 3. Run the bridge
@@ -59,6 +60,9 @@ You should see spoke data flowing with angles, ranges, and data lengths.
 cd ~/kahu-stack/mayara_ros_bridge
 ./run_bridge.sh
 ```
+
+The bridge auto-discovers the radar ID on every startup — no edits needed
+when the radar ID increments between sessions.
 
 ### 4. Verify in another terminal
 
@@ -75,7 +79,7 @@ ros2 topic echo /aura/perception/sensors/halo_a/data --once
 
 ### 5. View in Foxglove
 
-Connect Foxglove to `ws://10.0.0.28:8765` and subscribe to:
+Connect Foxglove to `ws://<pi-ip>:8765` and subscribe to:
 - `/aura/perception/sensors/halo_a/data`
 - `/aura/nav/odom`
 
@@ -83,14 +87,15 @@ Connect Foxglove to `ws://10.0.0.28:8765` and subscribe to:
 
 Parameters can be set via ROS2 params or environment variables:
 
-| Parameter          | Env Var            | Default                                               |
-|--------------------|--------------------|-------------------------------------------------------|
-| mayara_ws_url      | MAYARA_WS_URL      | ws://10.0.0.28:6502/v2/api/radars/radar-11/spokes     |
-| spokes_per_sector  | SPOKES_PER_SECTOR  | 64                                                    |
-| radar_frame_id     | RADAR_FRAME_ID     | halo_a                                                |
-| radar_topic        | RADAR_TOPIC        | /aura/perception/sensors/halo_a/data                  |
-| odom_topic         | ODOM_TOPIC         | /aura/nav/odom                                        |
-| spokes_per_rev     | SPOKES_PER_REV     | 2048                                                  |
+| Parameter          | Env Var            | Default                                                              |
+|--------------------|--------------------|----------------------------------------------------------------------|
+| mayara_host        | MAYARA_HOST        | 10.0.0.28:6502 — radar ID is auto-discovered from the REST API      |
+| mayara_ws_url      | MAYARA_WS_URL      | *(empty — auto-discover)*. Set to override with a specific radar ID  |
+| spokes_per_sector  | SPOKES_PER_SECTOR  | 64                                                                   |
+| radar_frame_id     | RADAR_FRAME_ID     | halo_a                                                               |
+| radar_topic        | RADAR_TOPIC        | /aura/perception/sensors/halo_a/data                                 |
+| odom_topic         | ODOM_TOPIC         | /aura/nav/odom                                                       |
+| spokes_per_rev     | SPOKES_PER_REV     | 2048                                                                 |
 
 ## Dependencies
 

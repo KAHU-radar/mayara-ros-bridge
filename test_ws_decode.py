@@ -39,9 +39,10 @@ def discover_radar_url(host: str) -> str:
         raise RuntimeError(f"Cannot reach Mayara API at {api_url}: {e}")
     if not radars:
         raise RuntimeError("Mayara found no radars")
-    radar_id = radars[0]["id"]
-    url = f"ws://{host}/v2/api/radars/{radar_id}/spokes"
-    print(f"Found radar: {radar_id}  →  {url}")
+    # Response is a dict keyed by radar ID, e.g. {"radar-17": {"streamUrl": "ws://...", ...}}
+    radar = list(radars.values())[0]
+    url = radar["streamUrl"]
+    print(f"Found radar: {radar['id']}  →  {url}")
     return url
 
 

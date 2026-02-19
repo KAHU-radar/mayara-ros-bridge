@@ -86,8 +86,9 @@ def _discover_radar_url(host: str) -> str:
     if not radars:
         raise RuntimeError(f"Mayara found no radars (response: {radars})")
 
-    radar_id = radars[0]["id"]
-    return f"ws://{host}/v2/api/radars/{radar_id}/spokes"
+    # Response is a dict keyed by radar ID, e.g. {"radar-17": {"streamUrl": "ws://...", ...}}
+    radar = list(radars.values())[0]
+    return radar["streamUrl"]
 
 
 class MayaraRosBridge(Node):
